@@ -1,0 +1,75 @@
+version: "3.8"
+services:
+  app:
+    container_name: app
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    depends_on:
+      - beanstalkd
+    volumes:
+      - app:/var/www/html/
+      - ./app/config/000-default.conf:/etc/apache2/sites-available/000-default.conf
+      - ./app/config/php.ini:/usr/local/etc/php/php.ini
+    ports:
+      - 8000:80
+    networks:
+      - beanstalkd_net
+
+  worker:
+    container_name: worker
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    depends_on:
+      - beanstalkd
+      - db
+    volumes:
+      - worker:/usr/src/worker/
+      - ./app/config/php.ini:/usr/local/etc/php/php.ini
+    ports:
+      - 1234:1234
+    networks:
+      - beanstalkd_net2
+      - db_net
+
+  beanstalkd:
+    container_name: beanstalkd
+    build: .
+    ports:
+      - 11300:11300
+    networks:
+      - beanstalkd_net
+      - beanstalkd_net2
+
+  db:
+    container_name: db
+    image: postgres:13-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: email
+    ports:
+      - 5432:5432
+    volumes:
+      - database-data:/var/lib/postgresql/data/
+      - ./worker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - db_net
+
+volumes:
+  worker:
+  app:
+  database-data:
+
+networks:
+  beanstalkd_net:
+    name: beanstalkd_net
+  beanstalkd_net2:
+    name: beanstalkd_net2
+  db_net:
+    name: db_net
